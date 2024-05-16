@@ -61,75 +61,80 @@ int spawn(char *program, char **arg_list)
 	}
 }
 
-void onePipeFunction(char *programs[], int number_commands) {
-    /* getting the first program to execvp() */
-    char *token;
-    token = strtok(programs[0], " ");
-    char *program_1;
-    program_1 = token;
+void nPipeFunction(char *programs[], int number_commands) {
+    int i, j;
+    int fds[number_commands - 1][2];
 
-    char *arg_list_1[10];
-    int size = 0;
-    while (token != NULL)
-    {
-        arg_list_1[size] = token;
-        token = strtok(NULL, " ");
-        size++;
-    }   
-    arg_list_1[size] = NULL;
+    for (i = 0; i < number_commands; i++) {
+        // cria um pipe para cada "comunicação", ou seja, n - 1
+        if (i < number_commands - 1) {
+            if (pipe(fds[i]) == -1) {
+                fprintf(stderr, "Pipe creation failed. Exiting with error...\n");
+                exit(1);
+            }
+        }
+        /* getting the first program to execvp() */
+        char *token;
+        token = strtok(programs[i], " ");
+        char *program;
+        program = token;
 
-    /* getting the first program to execvp() */
-    token = strtok(programs[1], " ");
-    char *program_2;
-    program_2 = token;
+        char *arg_list[10];
+        int size = 0;
+        while (token != NULL)
+        {
+            arg_list[size] = token;
+            token = strtok(NULL, " ");
+            size++;
+        }   
+        arg_list[size] = NULL;
 
-    char *arg_list_2[10];
-    size = 0;
-    while (token != NULL)
-    {
-        arg_list_2[size] = token;
-        token = strtok(NULL, " ");
-        size++;
-    }   
-    arg_list_2[size] = NULL;
+        /******************** first process ********************/
+        int child_status;
+        /* using the pipe */
+        pid_t child_pid;
+        child_pid = fork();
+        
+        if (child_pid == (pid_t)0) { /* se é um processo filho*/
+            if (i != 0) { // se não é o primeiro comando
+                // redireciona a entrada padrão para o pipe de leitura do comando anterior
+                dup2(fds[i - 1][0], STDIN_FILENO);
+            }
 
-    /* ****************************************************************** */
-    int fds[2];
-    if (pipe(fds) == -1) {
-        fprintf(stderr, "Pipe creation failed. Exiting with error...\n");
-        exit(1);
+            if (i < number_commands - 1) { // se não é o último comando
+                // redireciona a saída padrão para o pipe de escrita do próximo comando
+                dup2(fds[i][1], STDOUT_FILENO);
+            }
+
+            // fecha todos os pipes abertos
+            for (j = 0; j < number_commands - 1; j++) {
+                close(fds[j][0]);
+                close(fds[j][1]);
+            }
+
+            /* Agora execute PROGRAM, buscando-o no path. */
+            execvp(program, arg_list);
+            /* A função execvp só retorna se um erro ocorrer. */
+            fprintf(stderr, "Command \'%s\' not found.\n", program);
+            abort();
+        } else { // se é o processo pai
+            if (i != 0) { // se não é o primeiro comando
+                // Fecha o pipe de leitura do comando anterior
+                close(fds[i - 1][0]);
+                close(fds[i - 1][1]);
+            }
+        }
+    }
+   
+    // fecha os pipes no processo pai
+    for (i = 0; i < number_commands - 1; i++) {
+        close(fds[i][0]); /* pai não precisa ler */
+        close(fds[i][1]); /* pai não precisa escrever */
     }
 
-    /******************** first process ********************/
-    int child1_status;
-    /* using the pipe */
-    pid_t child1_pid;
-    child1_pid = fork();
-    
-    if (child1_pid == (pid_t)0)
-    {
-        dup2(fds[1],STDOUT_FILENO); // redirect stdout to pipe
-        close(fds[0]); //closing the read
-        /* Primeiro processo filho (quem escreve) */
-        execvp(program_1, arg_list_1);
+    for (i = 0; i < number_commands; i++) {
+        wait(NULL); /* espera todos os processos filhos */
     }
-    close(fds[1]); /* parent process no need writing */
-
-    /******************** second process ********************/
-    int child2_status;
-    /* using the pipe */
-    pid_t child2_pid;
-    child2_pid = fork();
-    if (child2_pid == (pid_t)0)
-    {
-        dup2(fds[0],STDIN_FILENO); // redirect stdout to pipe
-        /* Primeiro processo filho (quem escreve) */
-        execvp(program_2, arg_list_2);
-    }
-    close(fds[0]); /* parent process no need reading */
-
-    wait(NULL);
-    wait(NULL);
 
     return;
 }
@@ -171,8 +176,8 @@ void executeProgram(char *programs[], int number_commands) {
 
         spawn(arg_list[0], arg_list);
         wait(&child_status);
-    } else if (number_commands == 2) {
-        onePipeFunction(programs, number_commands);
+    } else {
+        nPipeFunction(programs, number_commands);
     }
 }
 
@@ -215,52 +220,6 @@ int main(void)
             }
 
         executeProgram(programs, number_commands);
-
-
-		// } else { // else, execute the program
-		// 	char *arg_list[32];
-
-		// 	int size = 0;
-		// 	while (token != NULL)
-		// 	{
-		// 		arg_list[size] = token;
-		// 		token = strtok(NULL, " ");
-		// 		size++;
-		// 	}
-		// 	arg_list[size] = NULL;
-		// 	/* Neste ponto, todos os argumentos estão na lista de argumentos */
-		// 	i = 0;
-		// 	number_commands = 1;
-
-		// 	while(arg_list[i] != NULL) {
-		// 		if(strcmp(arg_list[i], "|") == 0){
-		// 			number_commands++;
-		// 		}
-		// 		i++;
-		// 	}
-
-		// 	executeProgram(number_commands, arg_list);
-		// }
 	}
 	return 0;
 }
-
-/**
- * https://stackoverflow.com/questions/12981199/multiple-pipe-implementation-using-system-call-fork-execvp-wait-pipe-i
- * https://stackoverflow.com/questions/9070177/redirecting-output-of-execvp-into-a-file-in-c
- * https://stackoverflow.com/questions/13801175/classic-c-using-pipes-in-execvp-function-stdin-and-stdout-redirection
- * https://stackoverflow.com/questions/14288559/why-does-my-c-program-of-a-pipeline-with-two-pipes-hang?rq=3
- * function do(commands)
-    if commands is of size 1
-        exec commands[0] || die
-    split commands into c1 (first command) c2 (the rest of them)
-    open
-    if fork 
-        close input end of pipe
-        dup output of pipe to stdin
-        do (c2) || die
-    close output end of pipe
-    dup input of pipe to stdout
-    exec c1 || die
- * 
-*/
