@@ -73,7 +73,7 @@ void nPipeFunction(char *programs[], int number_commands) {
                 exit(1);
             }
         }
-        /* getting the first program to execvp() */
+        
         char *token;
         token = strtok(programs[i], " ");
         char *program;
@@ -89,9 +89,7 @@ void nPipeFunction(char *programs[], int number_commands) {
         }   
         arg_list[size] = NULL;
 
-        /******************** first process ********************/
         int child_status;
-        /* using the pipe */
         pid_t child_pid;
         child_pid = fork();
         
@@ -119,8 +117,9 @@ void nPipeFunction(char *programs[], int number_commands) {
             abort();
         } else { // se é o processo pai
             if (i != 0) { // se não é o primeiro comando
-                // Fecha o pipe de leitura do comando anterior
+                // fecha o pipe de leitura do comando anterior
                 close(fds[i - 1][0]);
+                // fecha o pipe de escrita do comando anterior
                 close(fds[i - 1][1]);
             }
         }
@@ -142,16 +141,16 @@ void nPipeFunction(char *programs[], int number_commands) {
 void executeProgram(char *programs[], int number_commands) {
     char* token;
     char* path;
-    if (number_commands == 1) { //checking for "exit" or "cd" instruction
+    if (number_commands == 1) { // buscando por "exit" or "cd"
         token = strtok(programs[0], " ");
         char *program;
         program = token;
 
         char* path;
-        if (strncmp(program, "exit", 4) == 0) { // if the program is "exit", QUIT
+        if (strncmp(program, "exit", 4) == 0) { // se o programa é "exit", saia
             // printf("Exiting...\n");
             exit(0);
-        } else if (strcmp(program, "cd") == 0) { // if the program is "cd", change the directory
+        } else if (strcmp(program, "cd") == 0) { // se o programa é "cd", mude o diretório
             path = strtok(NULL, "");
             if (path == NULL || strcmp(path, "~") == 0) {
                 path = getenv("HOME");
@@ -161,7 +160,7 @@ void executeProgram(char *programs[], int number_commands) {
             }
             return;
         }
-
+        /* se não é "exit" ou "cd", então execute o programa */
         char *arg_list[10];
         int size = 0;
         while (token != NULL)
